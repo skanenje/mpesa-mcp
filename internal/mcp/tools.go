@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonschema"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -27,101 +27,157 @@ type QRCodeInput struct {
 // registerTools registers all M-Pesa tools with the MCP server
 func (s *Server) registerTools() {
 	// STK Push tool
-	mcpsdk.AddTool(
-		s.mcp,
-		&mcpsdk.Tool{
-			Name:        "stk_push",
-			Description: "Initiate an M-Pesa STK Push payment request. This prompts the customer to authorize payment on their mobile device.",
-		},
-		func(ctx context.Context, req *mcpsdk.CallToolRequest, input STKPushInput) (*mcpsdk.CallToolResult, map[string]interface{}, error) {
-			response, err := s.mpesa.InitiateSTKPush(ctx, input.Amount, input.PhoneNumber)
-			if err != nil {
-				return nil, nil, fmt.Errorf("STK Push failed: %w", err)
-			}
-
-			jsonData, _ := json.Marshal(response)
-			var resultMap map[string]interface{}
-			json.Unmarshal(jsonData, &resultMap)
-
-			return &mcpsdk.CallToolResult{
-				Content: []interface{}{
-					&mcpsdk.TextContent{
-						Type: "text",
-						Text: fmt.Sprintf("STK Push initiated successfully!\n\nMerchant Request ID: %s\nCheckout Request ID: %s\nCustomer Message: %s",
-							response.MerchantRequestID,
-							response.CheckoutRequestID,
-							response.CustomerMessage,
-						),
+	s.mcp.AddTools(
+		&mcpsdk.ServerTool{
+			Tool: &mcpsdk.Tool{
+				Name:        "stk_push",
+				Description: "Initiate an M-Pesa STK Push payment request. This prompts the customer to authorize payment on their mobile device.",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"amount": {
+							Type:        "integer",
+							Description: "Amount to be paid in KES",
+						},
+						"phone_number": {
+							Type:        "string",
+							Description: "Phone number of customer (format: 254XXXXXXXXX or 0XXXXXXXXX)",
+						},
 					},
+					Required: []string{"amount", "phone_number"},
 				},
-			}, resultMap, nil
+			},
+			Handler: func(ctx context.Context, session *mcpsdk.ServerSession, params *mcpsdk.CallToolParamsFor[map[string]interface{}]) (*mcpsdk.CallToolResultFor[interface{}], error) {
+				args := params.Arguments
+				amountFloat, _ := args["amount"].(float64)
+				amount := int(amountFloat)
+				phoneNumber, _ := args["phone_number"].(string)
+
+				response, err := s.mpesa.InitiateSTKPush(ctx, amount, phoneNumber)
+				if err != nil {
+					return nil, fmt.Errorf("STK Push failed: %w", err)
+				}
+
+				jsonData, _ := json.Marshal(response)
+				var resultMap map[string]interface{}
+				json.Unmarshal(jsonData, &resultMap)
+
+				return &mcpsdk.CallToolResultFor[interface{}]{
+					Content: []mcpsdk.Content{
+						&mcpsdk.TextContent{
+							Text: fmt.Sprintf("STK Push initiated successfully!\n\nMerchant Request ID: %s\nCheckout Request ID: %s\nCustomer Message: %s",
+								response.MerchantRequestID,
+								response.CheckoutRequestID,
+								response.CustomerMessage,
+							),
+						},
+					},
+				}, nil
+			},
 		},
 	)
 
 	// QR Code generation tool
-	mcpsdk.AddTool(
-		s.mcp,
-		&mcpsdk.Tool{
-			Name:        "generate_qr_code",
-			Description: "Generate an M-Pesa QR code that customers can scan to make payment.",
-		},
-		func(ctx context.Context, req *mcpsdk.CallToolRequest, input QRCodeInput) (*mcpsdk.CallToolResult, map[string]interface{}, error) {
-			response, err := s.mpesa.GenerateQRCode(
-				ctx,
-				input.MerchantName,
-				input.RefNo,
-				input.Amount,
-				input.TrxCode,
-				input.CPIdentifier,
-			)
-			if err != nil {
-				return nil, nil, fmt.Errorf("QR code generation failed: %w", err)
-			}
-
-			jsonData, _ := json.Marshal(response)
-			var resultMap map[string]interface{}
-			json.Unmarshal(jsonData, &resultMap)
-
-			return &mcpsdk.CallToolResult{
-				Content: []interface{}{
-					&mcpsdk.TextContent{
-						Type: "text",
-						Text: fmt.Sprintf("QR Code generated successfully!\n\nRequest ID: %s\nQR Code (Base64): %s...",
-							response.RequestID,
-							response.QRCode[:min(50, len(response.QRCode))],
-						),
+	s.mcp.AddTools(
+		&mcpsdk.ServerTool{
+			Tool: &mcpsdk.Tool{
+				Name:        "generate_qr_code",
+				Description: "Generate an M-Pesa QR code that customers can scan to make payment.",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"merchant_name": {
+							Type:        "string",
+							Description: "Name of the merchant/business",
+						},
+						"ref_no": {
+							Type:        "string",
+							Description: "Transaction reference number",
+						},
+						"amount": {
+							Type:        "integer",
+							Description: "Amount to be paid in KES",
+						},
+						"trx_code": {
+							Type:        "string",
+							Description: "Transaction code (BG=Buy Goods WA=Withdraw PB=Paybill SM=Send Money SB=Send to Business)",
+						},
+						"cp_identifier": {
+							Type:        "string",
+							Description: "Credit party identifier (till number paybill or phone number)",
+						},
 					},
+					Required: []string{"merchant_name", "ref_no", "amount", "trx_code", "cp_identifier"},
 				},
-			}, resultMap, nil
+			},
+			Handler: func(ctx context.Context, session *mcpsdk.ServerSession, params *mcpsdk.CallToolParamsFor[map[string]interface{}]) (*mcpsdk.CallToolResultFor[interface{}], error) {
+				args := params.Arguments
+				merchantName, _ := args["merchant_name"].(string)
+				refNo, _ := args["ref_no"].(string)
+				amountFloat, _ := args["amount"].(float64)
+				amount := int(amountFloat)
+				trxCode, _ := args["trx_code"].(string)
+				cpIdentifier, _ := args["cp_identifier"].(string)
+
+				response, err := s.mpesa.GenerateQRCode(
+					ctx,
+					merchantName,
+					refNo,
+					amount,
+					trxCode,
+					cpIdentifier,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("QR code generation failed: %w", err)
+				}
+
+				jsonData, _ := json.Marshal(response)
+				var resultMap map[string]interface{}
+				json.Unmarshal(jsonData, &resultMap)
+
+				return &mcpsdk.CallToolResultFor[interface{}]{
+					Content: []mcpsdk.Content{
+						&mcpsdk.TextContent{
+							Text: fmt.Sprintf("QR Code generated successfully!\n\nRequest ID: %s\nQR Code (Base64): %s...",
+								response.RequestID,
+								response.QRCode[:min(50, len(response.QRCode))],
+							),
+						},
+					},
+				}, nil
+			},
 		},
 	)
 
 	// Token status tool
-	mcpsdk.AddTool(
-		s.mcp,
-		&mcpsdk.Tool{
-			Name:        "get_token_status",
-			Description: "Get the current access token status and expiry time.",
-		},
-		func(ctx context.Context, req *mcpsdk.CallToolRequest, input struct{}) (*mcpsdk.CallToolResult, map[string]interface{}, error) {
-			status := map[string]interface{}{
-				"has_token":  s.mpesa.GetAccessToken() != "",
-				"expires_at": s.mpesa.GetTokenExpiry().Format("2006-01-02 15:04:05"),
-				"is_valid":   s.mpesa.IsTokenValid(),
-			}
-
-			return &mcpsdk.CallToolResult{
-				Content: []interface{}{
-					&mcpsdk.TextContent{
-						Type: "text",
-						Text: fmt.Sprintf("Token Status:\n- Has Token: %v\n- Expires At: %s\n- Is Valid: %v",
-							status["has_token"],
-							status["expires_at"],
-							status["is_valid"],
-						),
-					},
+	s.mcp.AddTools(
+		&mcpsdk.ServerTool{
+			Tool: &mcpsdk.Tool{
+				Name:        "get_token_status",
+				Description: "Get the current access token status and expiry time.",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
 				},
-			}, status, nil
+			},
+			Handler: func(ctx context.Context, session *mcpsdk.ServerSession, params *mcpsdk.CallToolParamsFor[map[string]interface{}]) (*mcpsdk.CallToolResultFor[interface{}], error) {
+				status := map[string]interface{}{
+					"has_token":  s.mpesa.GetAccessToken() != "",
+					"expires_at": s.mpesa.GetTokenExpiry().Format("2006-01-02 15:04:05"),
+					"is_valid":   s.mpesa.IsTokenValid(),
+				}
+
+				return &mcpsdk.CallToolResultFor[interface{}]{
+					Content: []mcpsdk.Content{
+						&mcpsdk.TextContent{
+							Text: fmt.Sprintf("Token Status:\n- Has Token: %v\n- Expires At: %s\n- Is Valid: %v",
+								status["has_token"],
+								status["expires_at"],
+								status["is_valid"],
+							),
+						},
+					},
+				}, nil
+			},
 		},
 	)
 }

@@ -14,27 +14,26 @@ import (
 
 // SSETransport implements MCP transport over Server-Sent Events
 type SSETransport struct {
-	server      *mcpsdk.Server
-	sessions    map[string]*Session
-	sessionsMux sync.RWMutex
-}
-
-// Session represents an SSE connection session
-type Session struct {
-	ID       string
-	writer   http.ResponseWriter
-	flusher  http.Flusher
-	ctx      context.Context
-	cancel   context.CancelFunc
-	messages chan *mcpsdk.JSONRPCMessage
-	done     chan struct{}
+	connChan chan mcpsdk.Connection
+	sessions map[string]*SSESession
+	mu       sync.Mutex
 }
 
 // NewSSETransport creates a new SSE transport
-func NewSSETransport(server *mcpsdk.Server) *SSETransport {
+func NewSSETransport() *SSETransport {
 	return &SSETransport{
-		server:   server,
-		sessions: make(map[string]*Session),
+		connChan: make(chan mcpsdk.Connection),
+		sessions: make(map[string]*SSESession),
+	}
+}
+
+// Connect implements mcp.Transport
+func (t *SSETransport) Connect(ctx context.Context) (mcpsdk.Connection, error) {
+	select {
+	case conn := <-t.connChan:
+		return conn, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
@@ -58,47 +57,65 @@ func (t *SSETransport) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	sessionID := fmt.Sprintf("session_%d", time.Now().UnixNano())
 	ctx, cancel := context.WithCancel(r.Context())
 
-	session := &Session{
-		ID:       sessionID,
-		writer:   w,
-		flusher:  flusher,
-		ctx:      ctx,
-		cancel:   cancel,
-		messages: make(chan *mcpsdk.JSONRPCMessage, 10),
+	session := &SSESession{
+		id:       sessionID,
+		msgChan:  make(chan mcpsdk.JSONRPCMessage, 10),
+		readChan: make(chan mcpsdk.JSONRPCMessage, 10),
 		done:     make(chan struct{}),
+		cancel:   cancel,
 	}
 
 	// Register session
-	t.sessionsMux.Lock()
+	t.mu.Lock()
 	t.sessions[sessionID] = session
-	t.sessionsMux.Unlock()
+	t.mu.Unlock()
 
 	log.Printf("SSE connection established: %s", sessionID)
 
 	// Send endpoint event
 	endpoint := fmt.Sprintf("/message?session=%s", sessionID)
-	t.sendEvent(w, flusher, "endpoint", endpoint)
+	if err := t.sendEvent(w, flusher, "endpoint", endpoint); err != nil {
+		log.Printf("Failed to send endpoint event: %v", err)
+		return
+	}
+
+	// Notify Connect that a new connection is available
+	// We do this in a goroutine so we don't block the SSE handler
+	// But we need to ensure Connect picks it up.
+	go func() {
+		select {
+		case t.connChan <- session:
+			log.Printf("Session %s connected to server", sessionID)
+		case <-ctx.Done():
+			log.Printf("Session %s context done before connecting", sessionID)
+		case <-time.After(5 * time.Second):
+			log.Printf("Timeout waiting for server to accept session %s", sessionID)
+		}
+	}()
 
 	// Keep connection alive and send messages
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+	defer t.removeSession(sessionID)
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Printf("SSE connection closed: %s", sessionID)
-			t.removeSession(sessionID)
+			return
+
+		case <-session.done:
+			log.Printf("Session done: %s", sessionID)
 			return
 
 		case <-ticker.C:
 			// Send keepalive
 			if err := t.sendEvent(w, flusher, "ping", ""); err != nil {
 				log.Printf("Failed to send keepalive: %v", err)
-				t.removeSession(sessionID)
 				return
 			}
 
-		case msg := <-session.messages:
+		case msg := <-session.msgChan:
 			// Send message to client
 			data, err := json.Marshal(msg)
 			if err != nil {
@@ -108,7 +125,6 @@ func (t *SSETransport) HandleSSE(w http.ResponseWriter, r *http.Request) {
 
 			if err := t.sendEvent(w, flusher, "message", string(data)); err != nil {
 				log.Printf("Failed to send message: %v", err)
-				t.removeSession(sessionID)
 				return
 			}
 		}
@@ -130,9 +146,9 @@ func (t *SSETransport) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find session
-	t.sessionsMux.RLock()
+	t.mu.Lock()
 	session, exists := t.sessions[sessionID]
-	t.sessionsMux.RUnlock()
+	t.mu.Unlock()
 
 	if !exists {
 		http.Error(w, "Session not found", http.StatusNotFound)
@@ -140,37 +156,23 @@ func (t *SSETransport) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse JSON-RPC request
-	var request mcpsdk.JSONRPCMessage
+	// We decode into JSONRPCRequest. If it's a notification, it should still work (ID will be empty/null).
+	var request mcpsdk.JSONRPCRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Received request: method=%s, id=%v", request.Method, request.ID)
-
-	// Process request asynchronously
-	go t.processRequest(session, &request)
-
-	// Return 202 Accepted
-	w.WriteHeader(http.StatusAccepted)
-	w.Write([]byte(`{"status":"accepted"}`))
-}
-
-// processRequest processes a JSON-RPC request and sends response via SSE
-func (t *SSETransport) processRequest(session *Session, request *mcpsdk.JSONRPCMessage) {
-	ctx := session.ctx
-
-	// Handle the request using the MCP server
-	response := t.server.HandleMessage(ctx, request)
-
-	// Send response back via SSE
+	// Send to session
 	select {
-	case session.messages <- response:
-		log.Printf("Response sent for request id=%v", request.ID)
-	case <-ctx.Done():
-		log.Printf("Session closed before response could be sent")
+	case session.readChan <- &request:
+		// Accepted
+		w.WriteHeader(http.StatusAccepted)
+		w.Write([]byte(`{"status":"accepted"}`))
+	case <-session.done:
+		http.Error(w, "Session closed", http.StatusServiceUnavailable)
 	case <-time.After(5 * time.Second):
-		log.Printf("Timeout sending response for request id=%v", request.ID)
+		http.Error(w, "Timeout processing request", http.StatusServiceUnavailable)
 	}
 }
 
@@ -198,27 +200,69 @@ func (t *SSETransport) sendEvent(w http.ResponseWriter, flusher http.Flusher, ev
 
 // removeSession removes a session from the transport
 func (t *SSETransport) removeSession(sessionID string) {
-	t.sessionsMux.Lock()
-	defer t.sessionsMux.Unlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	if session, exists := t.sessions[sessionID]; exists {
-		session.cancel()
-		close(session.messages)
+		session.Close()
 		delete(t.sessions, sessionID)
 		log.Printf("Session removed: %s", sessionID)
 	}
 }
 
 // Close closes all sessions
-func (t *SSETransport) Close() {
-	t.sessionsMux.Lock()
-	defer t.sessionsMux.Unlock()
+func (t *SSETransport) Close() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	for _, session := range t.sessions {
-		session.cancel()
-		close(session.messages)
+		session.Close()
 	}
 
-	t.sessions = make(map[string]*Session)
-	log.Println("All sessions closed")
+	t.sessions = make(map[string]*SSESession)
+	return nil
+}
+
+// SSESession implements mcpsdk.Connection
+type SSESession struct {
+	id       string
+	msgChan  chan mcpsdk.JSONRPCMessage
+	readChan chan mcpsdk.JSONRPCMessage
+	done     chan struct{}
+	cancel   context.CancelFunc
+	once     sync.Once
+}
+
+func (s *SSESession) Read(ctx context.Context) (mcpsdk.JSONRPCMessage, error) {
+	select {
+	case msg := <-s.readChan:
+		return msg, nil
+	case <-s.done:
+		return nil, fmt.Errorf("session closed")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (s *SSESession) Write(ctx context.Context, msg mcpsdk.JSONRPCMessage) error {
+	select {
+	case s.msgChan <- msg:
+		return nil
+	case <-s.done:
+		return fmt.Errorf("session closed")
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *SSESession) Close() error {
+	s.once.Do(func() {
+		close(s.done)
+		s.cancel()
+	})
+	return nil
+}
+
+func (s *SSESession) SessionID() string {
+	return s.id
 }

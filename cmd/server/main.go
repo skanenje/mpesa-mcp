@@ -30,11 +30,18 @@ func main() {
 	ctx := context.Background()
 	go mpesaClient.StartTokenRefresh(ctx)
 
-	// Initialize MCP handler
-	mcpHandler := mcp.NewHandler(mpesaClient)
+	// Initialize MCP server
+	mcpServer := mcp.NewServer(mpesaClient)
 
 	// Create SSE transport
-	sseTransport := transport.NewSSETransport(mcpHandler)
+	sseTransport := transport.NewSSETransport()
+
+	// Run MCP server with SSE transport in background
+	go func() {
+		if err := mcpServer.GetMCPServer().Run(ctx, sseTransport); err != nil {
+			log.Printf("MCP server error: %v", err)
+		}
+	}()
 
 	// Setup HTTP routes
 	mux := http.NewServeMux()
