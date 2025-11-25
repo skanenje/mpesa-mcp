@@ -36,7 +36,12 @@ func NewServer(mpesaClient *mpesa.Client) *Server {
 	return s
 }
 
-// Run starts the MCP server
+// Run starts the MCP server with stdio transport
 func (s *Server) Run(ctx context.Context) error {
 	return s.mcp.Run(ctx, &mcpsdk.StdioTransport{})
+}
+
+// GetMCPServer returns the underlying MCP server for custom transports
+func (s *Server) GetMCPServer() *mcpsdk.Server {
+	return s.mcp
 }
