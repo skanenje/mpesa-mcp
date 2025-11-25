@@ -1,4 +1,4 @@
-package main
+package mpesa
 
 import (
 	"bytes"
@@ -7,32 +7,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 )
 
-// QRCodeRequest represents the request for QR code generation
-type QRCodeRequest struct {
-	MerchantName string `json:"MerchantName"`
-	RefNo        string `json:"RefNo"`
-	Amount       int    `json:"Amount"`
-	TrxCode      string `json:"TrxCode"`
-	CPI          string `json:"CPI"`
-	Size         string `json:"Size"`
-}
-
-// QRCodeResponse represents the response from QR code generation
-type QRCodeResponse struct {
-	ResponseCode        string `json:"ResponseCode"`
-	RequestID           string `json:"RequestID"`
-	ResponseDescription string `json:"ResponseDescription"`
-	QRCode              string `json:"QRCode"`
-	ErrorCode           string `json:"errorCode,omitempty"`
-	ErrorMessage        string `json:"errorMessage,omitempty"`
+var validTrxCodes = map[string]bool{
+	"BG": true, // Buy Goods
+	"WA": true, // Withdraw Cash
+	"PB": true, // Paybill
+	"SM": true, // Send Money (Mobile number)
+	"SB": true, // Send to Business
 }
 
 // GenerateQRCode generates a QR code for M-Pesa payment
-func (ctx *AppContext) GenerateQRCode(
-	bgCtx context.Context,
+func (c *Client) GenerateQRCode(
+	ctx context.Context,
 	merchantName string,
 	refNo string,
 	amount int,
@@ -40,14 +27,6 @@ func (ctx *AppContext) GenerateQRCode(
 	cpi string,
 ) (*QRCodeResponse, error) {
 	// Validate transaction code
-	validTrxCodes := map[string]bool{
-		"BG": true, // Buy Goods
-		"WA": true, // Withdraw Cash
-		"PB": true, // Paybill
-		"SM": true, // Send Money (Mobile number)
-		"SB": true, // Send to Business
-	}
-	
 	if !validTrxCodes[trxCode] {
 		return nil, fmt.Errorf("invalid transaction code: %s (must be BG, WA, PB, SM, or SB)", trxCode)
 	}
@@ -69,18 +48,17 @@ func (ctx *AppContext) GenerateQRCode(
 	}
 
 	// Create request
-	url := fmt.Sprintf("%s/mpesa/qrcode/v1/generate", ctx.baseURL)
-	req, err := http.NewRequestWithContext(bgCtx, "POST", url, bytes.NewBuffer(jsonData))
+	url := fmt.Sprintf("%s/mpesa/qrcode/v1/generate", c.config.BaseURL)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+ctx.accessToken)
+	req.Header.Set("Authorization", "Bearer "+c.GetAccessToken())
 	req.Header.Set("Content-Type", "application/json")
 
 	// Send request
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}

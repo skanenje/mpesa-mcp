@@ -1,4 +1,4 @@
-package main
+package mpesa
 
 import (
 	"context"
@@ -10,21 +10,15 @@ import (
 	"time"
 )
 
-// TokenResponse represents the OAuth token response from Daraja API
-type TokenResponse struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   string `json:"expires_in"`
-}
-
-// refreshToken gets a new access token from the Daraja API
-func (ctx *AppContext) refreshToken(bgCtx context.Context) error {
+// RefreshToken gets a new access token from the Daraja API
+func (c *Client) RefreshToken(ctx context.Context) error {
 	// Create basic auth header
-	auth := ctx.consumerKey + ":" + ctx.consumerSec
+	auth := c.config.ConsumerKey + ":" + c.config.ConsumerSec
 	encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
 
 	// Create request
-	url := fmt.Sprintf("%s/oauth/v1/generate?grant_type=client_credentials", ctx.baseURL)
-	req, err := http.NewRequestWithContext(bgCtx, "GET", url, nil)
+	url := fmt.Sprintf("%s/oauth/v1/generate?grant_type=client_credentials", c.config.BaseURL)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -32,8 +26,7 @@ func (ctx *AppContext) refreshToken(bgCtx context.Context) error {
 	req.Header.Set("Authorization", "Basic "+encodedAuth)
 
 	// Send request
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
@@ -50,9 +43,9 @@ func (ctx *AppContext) refreshToken(bgCtx context.Context) error {
 		return fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Update context
-	ctx.accessToken = tokenResp.AccessToken
-	ctx.tokenExpiry = time.Now().Add(55 * time.Minute) // Set expiry slightly before actual
+	// Update token (thread-safe)
+	expiry := time.Now().Add(55 * time.Minute)
+	c.setAccessToken(tokenResp.AccessToken, expiry)
 
 	return nil
 }
