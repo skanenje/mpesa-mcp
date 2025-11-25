@@ -39,7 +39,7 @@ CUSTOMER (PartyA)  →  Pays Money  →  YOUR BUSINESS (PartyB)
 ## 📚 Documentation
 
 ### Getting Started
-- [Quick Start Guide](./QUICKSTART.md) - Get up and running in 5 minutes
+- [Quick Start Guide](./docs/QUICKSTART.md) - Get up and running in 5 minutes
 - [Setup Guide](./docs/SETUP.md) - Detailed installation and configuration
 - [Payment Flow Guide](./docs/PAYMENT_FLOW.md) - Understanding who pays who
 
@@ -56,9 +56,9 @@ CUSTOMER (PartyA)  →  Pays Money  →  YOUR BUSINESS (PartyB)
 ### Additional Resources
 - [Use Cases & Examples](./docs/USE_CASES.md) - Real-world scenarios
 - [Callback Implementation](./CALLBACK_IMPLEMENTATION.md) - Handle payment confirmations
-- [Architecture](./ARCHITECTURE.md) - System design and structure
-- [Contributing](./CONTRIBUTING.md) - How to contribute
-- [Changelog](./CHANGELOG.md) - Version history
+- [Architecture](./docs/ARCHITECTURE.md) - System design and structure
+- [Contributing](./docs/CONTRIBUTING.md) - How to contribute
+- [Changelog](./docs/CHANGELOG.md) - Version history
 
 ## 🚀 Quick Start
 
