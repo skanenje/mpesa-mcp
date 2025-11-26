@@ -133,7 +133,10 @@ func (t *SSETransport) HandleSSE(w http.ResponseWriter, r *http.Request) {
 
 // HandleMessage handles incoming JSON-RPC messages
 func (t *SSETransport) HandleMessage(w http.ResponseWriter, r *http.Request) {
+	log.Printf("[SSE] Received message request from %s", r.RemoteAddr)
+
 	if r.Method != http.MethodPost {
+		log.Printf("[SSE] Invalid method: %s", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -141,9 +144,11 @@ func (t *SSETransport) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	// Get session ID
 	sessionID := r.URL.Query().Get("session")
 	if sessionID == "" {
+		log.Printf("[SSE] Missing session parameter")
 		http.Error(w, "Missing session parameter", http.StatusBadRequest)
 		return
 	}
+	log.Printf("[SSE] Looking for session: %s", sessionID)
 
 	// Find session
 	t.mu.Lock()
@@ -151,27 +156,34 @@ func (t *SSETransport) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	t.mu.Unlock()
 
 	if !exists {
+		log.Printf("[SSE] Session not found: %s (active sessions: %d)", sessionID, len(t.sessions))
 		http.Error(w, "Session not found", http.StatusNotFound)
 		return
 	}
+	log.Printf("[SSE] Session found: %s", sessionID)
 
 	// Parse JSON-RPC request
 	// We decode into JSONRPCRequest. If it's a notification, it should still work (ID will be empty/null).
 	var request mcpsdk.JSONRPCRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		log.Printf("[SSE] Failed to decode JSON-RPC request: %v", err)
 		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
 		return
 	}
+	log.Printf("[SSE] Parsed JSON-RPC request - Method: %s, ID: %v", request.Method, request.ID)
 
 	// Send to session
 	select {
 	case session.readChan <- &request:
 		// Accepted
+		log.Printf("[SSE] Request accepted and queued for session %s", sessionID)
 		w.WriteHeader(http.StatusAccepted)
 		w.Write([]byte(`{"status":"accepted"}`))
 	case <-session.done:
+		log.Printf("[SSE] Session closed while processing request: %s", sessionID)
 		http.Error(w, "Session closed", http.StatusServiceUnavailable)
 	case <-time.After(5 * time.Second):
+		log.Printf("[SSE] Timeout processing request for session: %s", sessionID)
 		http.Error(w, "Timeout processing request", http.StatusServiceUnavailable)
 	}
 }
@@ -234,23 +246,31 @@ type SSESession struct {
 }
 
 func (s *SSESession) Read(ctx context.Context) (mcpsdk.JSONRPCMessage, error) {
+	log.Printf("[Session %s] Waiting to read message...", s.id)
 	select {
 	case msg := <-s.readChan:
+		log.Printf("[Session %s] Read message from client", s.id)
 		return msg, nil
 	case <-s.done:
+		log.Printf("[Session %s] Read failed: session closed", s.id)
 		return nil, fmt.Errorf("session closed")
 	case <-ctx.Done():
+		log.Printf("[Session %s] Read failed: context done", s.id)
 		return nil, ctx.Err()
 	}
 }
 
 func (s *SSESession) Write(ctx context.Context, msg mcpsdk.JSONRPCMessage) error {
+	log.Printf("[Session %s] Writing message to client...", s.id)
 	select {
 	case s.msgChan <- msg:
+		log.Printf("[Session %s] Message written successfully", s.id)
 		return nil
 	case <-s.done:
+		log.Printf("[Session %s] Write failed: session closed", s.id)
 		return fmt.Errorf("session closed")
 	case <-ctx.Done():
+		log.Printf("[Session %s] Write failed: context done", s.id)
 		return ctx.Err()
 	}
 }

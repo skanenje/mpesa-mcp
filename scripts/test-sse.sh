@@ -30,7 +30,7 @@ echo ""
 echo "   SESSION_ID='session_xxxxx'"
 echo "   curl -X POST \"$BASE_URL/message?session=\$SESSION_ID\" \\"
 echo "     -H 'Content-Type: application/json' \\"
-echo "     -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1.0\"}}}'"
+echo "     -d '{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1.0\"}}}'"
 echo ""
 
 # Keep SSE connection open

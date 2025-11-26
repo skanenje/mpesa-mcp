@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonschema"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -48,15 +49,22 @@ func (s *Server) registerTools() {
 				},
 			},
 			Handler: func(ctx context.Context, session *mcpsdk.ServerSession, params *mcpsdk.CallToolParamsFor[map[string]interface{}]) (*mcpsdk.CallToolResultFor[interface{}], error) {
+				log.Printf("[Tool:stk_push] Called with params: %+v", params.Arguments)
+
 				args := params.Arguments
 				amountFloat, _ := args["amount"].(float64)
 				amount := int(amountFloat)
 				phoneNumber, _ := args["phone_number"].(string)
 
+				log.Printf("[Tool:stk_push] Initiating STK Push - Amount: %d, Phone: %s", amount, phoneNumber)
+
 				response, err := s.mpesa.InitiateSTKPush(ctx, amount, phoneNumber)
 				if err != nil {
+					log.Printf("[Tool:stk_push] Failed: %v", err)
 					return nil, fmt.Errorf("STK Push failed: %w", err)
 				}
+
+				log.Printf("[Tool:stk_push] Success - MerchantRequestID: %s, CheckoutRequestID: %s", response.MerchantRequestID, response.CheckoutRequestID)
 
 				jsonData, _ := json.Marshal(response)
 				var resultMap map[string]interface{}
@@ -111,6 +119,8 @@ func (s *Server) registerTools() {
 				},
 			},
 			Handler: func(ctx context.Context, session *mcpsdk.ServerSession, params *mcpsdk.CallToolParamsFor[map[string]interface{}]) (*mcpsdk.CallToolResultFor[interface{}], error) {
+				log.Printf("[Tool:generate_qr_code] Called with params: %+v", params.Arguments)
+
 				args := params.Arguments
 				merchantName, _ := args["merchant_name"].(string)
 				refNo, _ := args["ref_no"].(string)
@@ -118,6 +128,8 @@ func (s *Server) registerTools() {
 				amount := int(amountFloat)
 				trxCode, _ := args["trx_code"].(string)
 				cpIdentifier, _ := args["cp_identifier"].(string)
+
+				log.Printf("[Tool:generate_qr_code] Generating QR - Merchant: %s, Amount: %d", merchantName, amount)
 
 				response, err := s.mpesa.GenerateQRCode(
 					ctx,
@@ -128,8 +140,11 @@ func (s *Server) registerTools() {
 					cpIdentifier,
 				)
 				if err != nil {
+					log.Printf("[Tool:generate_qr_code] Failed: %v", err)
 					return nil, fmt.Errorf("QR code generation failed: %w", err)
 				}
+
+				log.Printf("[Tool:generate_qr_code] Success - RequestID: %s", response.RequestID)
 
 				jsonData, _ := json.Marshal(response)
 				var resultMap map[string]interface{}
@@ -160,11 +175,15 @@ func (s *Server) registerTools() {
 				},
 			},
 			Handler: func(ctx context.Context, session *mcpsdk.ServerSession, params *mcpsdk.CallToolParamsFor[map[string]interface{}]) (*mcpsdk.CallToolResultFor[interface{}], error) {
+				log.Printf("[Tool:get_token_status] Called")
+
 				status := map[string]interface{}{
 					"has_token":  s.mpesa.GetAccessToken() != "",
 					"expires_at": s.mpesa.GetTokenExpiry().Format("2006-01-02 15:04:05"),
 					"is_valid":   s.mpesa.IsTokenValid(),
 				}
+
+				log.Printf("[Tool:get_token_status] Status: %+v", status)
 
 				return &mcpsdk.CallToolResultFor[interface{}]{
 					Content: []mcpsdk.Content{

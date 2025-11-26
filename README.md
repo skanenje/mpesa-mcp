@@ -55,10 +55,9 @@ CUSTOMER (PartyA)  →  Pays Money  →  YOUR BUSINESS (PartyB)
 
 ### Additional Resources
 - [Use Cases & Examples](./docs/USE_CASES.md) - Real-world scenarios
-- [Callback Implementation](./CALLBACK_IMPLEMENTATION.md) - Handle payment confirmations
+- [Callback Implementation](./docs/CALLBACK_IMPLEMENTATION.md) - Handle payment confirmations
 - [Architecture](./docs/ARCHITECTURE.md) - System design and structure
 - [Contributing](./docs/CONTRIBUTING.md) - How to contribute
-- [Changelog](./docs/CHANGELOG.md) - Version history
 
 ## 🚀 Quick Start
 

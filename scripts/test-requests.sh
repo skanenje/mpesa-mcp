@@ -21,7 +21,7 @@ curl -X POST "$BASE_URL/message?session=$SESSION_ID" \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",
-    "id": 1,
+    "id": "1",
     "method": "initialize",
     "params": {
       "protocolVersion": "2024-11-05",
@@ -42,7 +42,7 @@ curl -X POST "$BASE_URL/message?session=$SESSION_ID" \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",
-    "id": 2,
+    "id": "2",
     "method": "tools/list",
     "params": {}
   }'
@@ -56,7 +56,7 @@ curl -X POST "$BASE_URL/message?session=$SESSION_ID" \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",
-    "id": 3,
+    "id": "3",
     "method": "tools/call",
     "params": {
       "name": "get_token_status",
