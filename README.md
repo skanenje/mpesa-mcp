@@ -70,7 +70,7 @@ CUSTOMER (PartyA)  →  Pays Money  →  YOUR BUSINESS (PartyB)
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/mpesa-mcp.git
+git clone https://github.com/skanenje/mpesa-mcp.git
 cd mpesa-mcp
 
 # Configure environment

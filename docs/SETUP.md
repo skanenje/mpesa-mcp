@@ -13,7 +13,7 @@ Complete setup instructions for the M-Pesa MCP Server.
 
 ## Step 1: Get Daraja Credentials
 
-1. Visit [Safaricom Daraja Portal](https://developer.safaricom.co.ke/)
+1. Visit [Safaricom Daraja Portal](https://daraja.safaricom.co.ke/)
 2. Log in and go to "My Apps"
 3. Click "Create Sandbox App"
 4. **Select "Lipa Na M-Pesa Sandbox"**
