@@ -17,7 +17,7 @@ echo ""
 
 # Test 1: Initialize
 echo "1. Sending initialize request..."
-curl -X POST "$BASE_URL/message?session=$SESSION_ID" \
+curl -X POST "$BASE_URL/message?sessionid=$SESSION_ID" \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",
@@ -38,7 +38,7 @@ sleep 1
 
 # Test 2: List tools
 echo "2. Sending tools/list request..."
-curl -X POST "$BASE_URL/message?session=$SESSION_ID" \
+curl -X POST "$BASE_URL/message?sessionid=$SESSION_ID" \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",
@@ -52,7 +52,7 @@ sleep 1
 
 # Test 3: Get token status
 echo "3. Calling get_token_status tool..."
-curl -X POST "$BASE_URL/message?session=$SESSION_ID" \
+curl -X POST "$BASE_URL/message?sessionid=$SESSION_ID" \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",

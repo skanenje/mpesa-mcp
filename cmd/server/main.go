@@ -45,6 +45,7 @@ func main() {
 	mux.HandleFunc("/health", healthHandler)
 	mux.Handle("/sse", sseHandler)
 	mux.Handle("/message", sseHandler)
+	mux.HandleFunc("/callback", mpesaClient.ProcessCallback)
 
 	// Get port from environment or use default
 	port := os.Getenv("PORT")

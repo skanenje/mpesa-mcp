@@ -214,3 +214,14 @@ With the new logging system, you'll see detailed output in your server terminal:
 2. **Watch server logs**: They show detailed information about each request
 3. **Use unique IDs**: Each request should have a unique ID string
 4. **Check .env file**: Make sure your M-Pesa credentials are configured
+
+## Testing Callbacks (Webhooks)
+
+To test that your server receives payment notifications from M-Pesa:
+
+1.  **Start ngrok**: `ngrok http 8080`
+2.  **Update .env**: Set `CALLBACK_URL` to your ngrok URL + `/callback` (e.g., `https://xxxx.ngrok-free.app/callback`)
+3.  **Restart Server**: `go run cmd/server/main.go`
+4.  **Trigger Payment**: Use the `stk_push` tool.
+5.  **Check Logs**: Watch your server terminal for "Received M-Pesa Callback".
+

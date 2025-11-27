@@ -96,6 +96,9 @@ mpesa-mcp/
 ├── internal/
 │   ├── config/         # Configuration management
 │   ├── mpesa/          # M-Pesa API client
+│   │   ├── client.go
+│   │   ├── callback.go     # Callback handling
+│   │   └── ...
 │   ├── mcp/            # MCP server and handlers
 │   ├── transport/      # Transport layer (SSE)
 │   └── utils/          # Utility functions

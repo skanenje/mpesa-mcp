@@ -14,6 +14,7 @@ This MCP server allows AI agents (like those built with Google ADK, LangChain, C
 - Initiate M-Pesa STK Push payments (prompt customers to pay from their phones)
 - Generate M-Pesa QR codes for payment
 - Check authentication token status
+- **[NEW]** Handle M-Pesa payment callbacks (webhooks)
 
 **New to this project?** → Start with the [Quick Start Guide](./QUICKSTART.md) (5 minutes)
 
