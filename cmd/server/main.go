@@ -13,7 +13,8 @@ import (
 	"mpesa-mcp/internal/config"
 	"mpesa-mcp/internal/mcp"
 	"mpesa-mcp/internal/mpesa"
-	"mpesa-mcp/internal/transport"
+
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func main() {
@@ -33,21 +34,17 @@ func main() {
 	// Initialize MCP server
 	mcpServer := mcp.NewServer(mpesaClient)
 
-	// Create SSE transport
-	sseTransport := transport.NewSSETransport()
-
-	// Run MCP server with SSE transport in background
-	go func() {
-		if err := mcpServer.GetMCPServer().Run(ctx, sseTransport); err != nil {
-			log.Printf("MCP server error: %v", err)
-		}
-	}()
+	// Create SSE handler using SDK's built-in handler
+	// This properly handles multiple concurrent sessions
+	sseHandler := mcpsdk.NewSSEHandler(func(r *http.Request) *mcpsdk.Server {
+		return mcpServer.GetMCPServer()
+	})
 
 	// Setup HTTP routes
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc("/sse", sseTransport.HandleSSE)
-	mux.HandleFunc("/message", sseTransport.HandleMessage)
+	mux.Handle("/sse", sseHandler)
+	mux.Handle("/message", sseHandler)
 
 	// Get port from environment or use default
 	port := os.Getenv("PORT")
@@ -86,8 +83,6 @@ func main() {
 	// Graceful shutdown
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	sseTransport.Close()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Fatal("Server forced to shutdown:", err)

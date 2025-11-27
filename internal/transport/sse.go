@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"reflect"
 	"sync"
 	"time"
+	"unsafe"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -25,6 +28,18 @@ func NewSSETransport() *SSETransport {
 		connChan: make(chan mcpsdk.Connection),
 		sessions: make(map[string]*SSESession),
 	}
+}
+
+// makeJSONRPCID creates a jsonrpc2.ID using unsafe to set the unexported value field.
+// This is necessary because the SDK's Int64ID and StringID functions are in an internal package.
+func makeJSONRPCID(value any) mcpsdk.JSONRPCID {
+	var id mcpsdk.JSONRPCID
+	// Use reflection to set the unexported 'value' field
+	v := reflect.ValueOf(&id).Elem()
+	field := v.Field(0) // The 'value' field is the first (and only) field
+	// Use unsafe to modify the unexported field
+	reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Set(reflect.ValueOf(value))
+	return id
 }
 
 // Connect implements mcp.Transport
@@ -163,18 +178,63 @@ func (t *SSETransport) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[SSE] Session found: %s", sessionID)
 
 	// Parse JSON-RPC request
-	// We decode into JSONRPCRequest. If it's a notification, it should still work (ID will be empty/null).
-	var request mcpsdk.JSONRPCRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		log.Printf("[SSE] Failed to decode JSON-RPC request: %v", err)
+	// Read the body first
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("[SSE] Failed to read request body: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to read request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Unmarshal into a temporary structure to extract the raw ID value
+	var rawMsg struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      any             `json:"id"`
+		Method  string          `json:"method"`
+		Params  json.RawMessage `json:"params"`
+	}
+	if err := json.Unmarshal(body, &rawMsg); err != nil {
+		log.Printf("[SSE] Failed to unmarshal JSON: %v", err)
 		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
 		return
+	}
+
+	// Validate JSON-RPC version
+	if rawMsg.JSONRPC != "2.0" {
+		log.Printf("[SSE] Invalid JSON-RPC version: %s", rawMsg.JSONRPC)
+		http.Error(w, "Invalid JSON-RPC version", http.StatusBadRequest)
+		return
+	}
+
+	// Create the proper ID
+	var id mcpsdk.JSONRPCID
+	switch v := rawMsg.ID.(type) {
+	case nil:
+		// Notification (no ID)
+		id = mcpsdk.JSONRPCID{}
+	case float64:
+		// Numeric ID - use unsafe to set the unexported value field
+		id = makeJSONRPCID(int64(v))
+	case string:
+		// String ID - use unsafe to set the unexported value field
+		id = makeJSONRPCID(v)
+	default:
+		log.Printf("[SSE] Invalid ID type: %T", rawMsg.ID)
+		http.Error(w, "Invalid ID type", http.StatusBadRequest)
+		return
+	}
+
+	// Construct the request
+	request := &mcpsdk.JSONRPCRequest{
+		ID:     id,
+		Method: rawMsg.Method,
+		Params: rawMsg.Params,
 	}
 	log.Printf("[SSE] Parsed JSON-RPC request - Method: %s, ID: %v", request.Method, request.ID)
 
 	// Send to session
 	select {
-	case session.readChan <- &request:
+	case session.readChan <- request:
 		// Accepted
 		log.Printf("[SSE] Request accepted and queued for session %s", sessionID)
 		w.WriteHeader(http.StatusAccepted)
