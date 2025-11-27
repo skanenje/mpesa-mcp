@@ -39,7 +39,6 @@ CUSTOMER (PartyA)  →  Pays Money  →  YOUR BUSINESS (PartyB)
 ## 📚 Documentation
 
 ### Getting Started
-- [Quick Start Guide](./docs/QUICKSTART.md) - Get up and running in 5 minutes
 - [Setup Guide](./docs/SETUP.md) - Detailed installation and configuration
 - [Payment Flow Guide](./docs/PAYMENT_FLOW.md) - Understanding who pays who
 
