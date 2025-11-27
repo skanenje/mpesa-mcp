@@ -1,4 +1,5 @@
-#!/bin/bash
+
+/bin/bash
 
 # Manual test requests for MCP server
 # Usage: ./test-requests.sh <session_id>

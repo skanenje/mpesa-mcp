@@ -15,6 +15,11 @@ import (
 
 // InitiateSTKPush initiates an STK Push payment request
 func (c *Client) InitiateSTKPush(ctx context.Context, amount int, phoneNumber string) (*STKPushResponse, error) {
+	return c.InitiateSTKPushWithOptions(ctx, amount, phoneNumber, "", "")
+}
+
+// InitiateSTKPushWithOptions initiates an STK Push payment request with optional parameters
+func (c *Client) InitiateSTKPushWithOptions(ctx context.Context, amount int, phoneNumber, accountRef, transDesc string) (*STKPushResponse, error) {
 	// Generate timestamp
 	timestamp := time.Now().Format("20060102150405")
 
@@ -24,6 +29,22 @@ func (c *Client) InitiateSTKPush(ctx context.Context, amount int, phoneNumber st
 
 	// Format phone number
 	formattedPhone := utils.FormatPhoneNumber(phoneNumber)
+
+	// Use provided values or defaults
+	if accountRef == "" {
+		accountRef = c.config.AccountRef
+	}
+	if transDesc == "" {
+		transDesc = "Payment for goods/services"
+	}
+
+	// Validate field lengths per M-Pesa documentation
+	if len(accountRef) > 12 {
+		accountRef = accountRef[:12]
+	}
+	if len(transDesc) > 13 {
+		transDesc = transDesc[:13]
+	}
 
 	// Create request payload
 	payload := STKPushRequest{
@@ -36,8 +57,8 @@ func (c *Client) InitiateSTKPush(ctx context.Context, amount int, phoneNumber st
 		PartyB:            c.config.BusinessCode,
 		PhoneNumber:       formattedPhone,
 		CallBackURL:       c.config.CallbackURL,
-		AccountReference:  c.config.AccountRef,
-		TransactionDesc:   "Payment for goods/services",
+		AccountReference:  accountRef,
+		TransactionDesc:   transDesc,
 	}
 
 	// Marshal payload

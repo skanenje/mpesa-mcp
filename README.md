@@ -76,6 +76,8 @@ cd mpesa-mcp
 # Configure environment
 cp .env.example .env
 # Edit .env with your Daraja credentials
+# ⚠️ IMPORTANT: Use RAW passkey, not base64 encoded!
+# See docs/PASSKEY_GUIDE.md for details
 
 # Build and run
 go build -o mpesa-mcp cmd/server/main.go
@@ -84,7 +86,8 @@ go build -o mpesa-mcp cmd/server/main.go
 
 Server will start on `http://localhost:8080`
 
-**Full setup instructions**: [Setup Guide](./docs/SETUP.md)
+**Full setup instructions**: [Setup Guide](./docs/SETUP.md)  
+**Passkey configuration**: [Passkey Guide](./docs/PASSKEY_GUIDE.md)
 
 ## 🛠️ Available Tools
 

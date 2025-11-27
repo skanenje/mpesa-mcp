@@ -38,11 +38,19 @@ func (s *Server) registerTools() {
 					Properties: map[string]*jsonschema.Schema{
 						"amount": {
 							Type:        "integer",
-							Description: "Amount to be paid in KES",
+							Description: "Amount to be paid in KES (minimum 1)",
 						},
 						"phone_number": {
 							Type:        "string",
 							Description: "Phone number of customer (format: 254XXXXXXXXX or 0XXXXXXXXX)",
+						},
+						"account_reference": {
+							Type:        "string",
+							Description: "Account reference shown to customer (max 12 characters, optional)",
+						},
+						"transaction_desc": {
+							Type:        "string",
+							Description: "Transaction description (max 13 characters, optional)",
 						},
 					},
 					Required: []string{"amount", "phone_number"},
@@ -55,10 +63,12 @@ func (s *Server) registerTools() {
 				amountFloat, _ := args["amount"].(float64)
 				amount := int(amountFloat)
 				phoneNumber, _ := args["phone_number"].(string)
+				accountRef, _ := args["account_reference"].(string)
+				transDesc, _ := args["transaction_desc"].(string)
 
 				log.Printf("[Tool:stk_push] Initiating STK Push - Amount: %d, Phone: %s", amount, phoneNumber)
 
-				response, err := s.mpesa.InitiateSTKPush(ctx, amount, phoneNumber)
+				response, err := s.mpesa.InitiateSTKPushWithOptions(ctx, amount, phoneNumber, accountRef, transDesc)
 				if err != nil {
 					log.Printf("[Tool:stk_push] Failed: %v", err)
 					return nil, fmt.Errorf("STK Push failed: %w", err)

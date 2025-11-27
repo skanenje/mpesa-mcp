@@ -4,6 +4,28 @@ Common issues and solutions for the M-Pesa MCP Server.
 
 ## Common Issues
 
+### "Wrong credentials" (Error 500.001.1001)
+
+**Symptoms**: STK Push fails with `500.001.1001 - Wrong credentials`
+
+**Root Cause**: This is usually caused by incorrect passkey configuration.
+
+**Solutions**:
+1. **Check passkey format**: Must be RAW passkey, NOT base64 encoded
+   - ❌ Wrong: `jpDNpPOYza8lcQTJD5IlndJR4dyPWMbkeX8TdE6CZXZirqpqWwpJ73jrdBnsiVEw...`
+   - ✅ Correct: `bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919`
+
+2. **For sandbox**: Use the standard test passkey:
+   ```
+   bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919
+   ```
+
+3. **For production**: Use the raw passkey sent to your email after Go Live
+
+4. **Verify BusinessShortCode**: Must match the shortcode used in password encoding
+
+📖 **Full guide**: [Passkey Configuration Guide](./PASSKEY_GUIDE.md)
+
 ### "Invalid Access Token"
 
 **Symptoms**: API calls fail with authentication errors
