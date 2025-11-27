@@ -64,7 +64,7 @@ CUSTOMER (PartyA)  →  Pays Money  →  YOUR BUSINESS (PartyB)
 ### Prerequisites
 
 1. **Go 1.22+** installed
-2. **Safaricom Daraja API credentials** - Get them at https://developer.safaricom.co.ke/
+2. **Safaricom Daraja API credentials** - Get them at https://daraja.safaricom.co.ke/
 
 ### Installation
 
